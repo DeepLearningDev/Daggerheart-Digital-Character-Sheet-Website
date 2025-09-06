@@ -1,0 +1,10 @@
+{
+  "Rogue": {
+    "startEvasion": 12,
+    "base": { "hpMax": 6, "stressMax": 6 },
+    "suggested": { "agility": 1, "strength": -1, "finesse": 2, "instinct": 0, "presence": 1, "knowledge": 0 },
+    "actions": [
+      { "id": "dodge", "label": "+2 Evasion until hit", "type": "buff", "key": "evadeBuff", "value": 2 }
+    ]
+  }
+}

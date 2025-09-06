@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
-// ---- Daggerheart Digital Sheet (Multi‑Class) — TypeScript-friendly React ----
+// ---- Daggerheart Digital Sheet (Multi-Class) — TypeScript-friendly React ----
 // Paste this into src/App.tsx in a Vite React + Tailwind project.
 // Saves to localStorage; class actions are logged; ready to bolt on a backend later.
 
@@ -44,7 +44,11 @@ const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(ma
 const d = (sides: number) => Math.floor(Math.random() * sides) + 1;
 const lsKey = (id: string) => `dh-sheet:${id}`;
 
-// ------- Minimal class library (expand as you like) -------
+function assertNever(x: never): never {
+  throw new Error(`Unhandled ClassAction variant: ${JSON.stringify(x)}`);
+}
+
+// ------- Built-in class library (seed) -------
 const CLASS_LIBRARY: Record<string, ClassDef> = {
   Bard: {
     startEvasion: 10,
@@ -131,8 +135,10 @@ function useLocalSheet(id: string, initial: Sheet): [Sheet, React.Dispatch<React
   return [sheet, setSheet];
 }
 
-function defaultSheet(classKey: string = "Rogue"): Sheet {
-  const c = CLASS_LIBRARY[classKey] || CLASS_LIBRARY.Rogue;
+// NOTE: defaultSheet now takes a library param so it works with external JSON too.
+function defaultSheet(classKey: string = "Rogue", lib: Record<string, ClassDef> = CLASS_LIBRARY): Sheet {
+  const fallbackClassKey = lib.Rogue ? "Rogue" : Object.keys(lib)[0];
+  const c = lib[classKey] || lib[fallbackClassKey];
   return {
     id: crypto?.randomUUID?.() || String(Date.now()),
     classKey,
@@ -237,8 +243,14 @@ function WeaponEditor({ data, onChange, title }: { data: Weapon; onChange: (w: W
 }
 
 // ------- Class Actions -------
-function ClassActions({ sheet, setSheet }: { sheet: Sheet; setSheet: React.Dispatch<React.SetStateAction<Sheet>>; }) {
-  const cls = CLASS_LIBRARY[sheet.classKey];
+function ClassActions({
+  sheet, setSheet, classDef,
+}: {
+  sheet: Sheet;
+  setSheet: React.Dispatch<React.SetStateAction<Sheet>>;
+  classDef: ClassDef | undefined;
+}) {
+  const cls = classDef;
   if (!cls) return null;
 
   const log = (line: string) => setSheet(s => ({ ...s, _log: [line, ...s._log].slice(0, 20) }));
@@ -247,31 +259,39 @@ function ClassActions({ sheet, setSheet }: { sheet: Sheet; setSheet: React.Dispa
     switch (action.type) {
       case "note":
         log(`${sheet.meta.name || "Character"} uses ${action.label}.`);
-        break;
+        return;
+
       case "roll": {
         const sides = action.die ?? 6; const r = d(sides);
         log(`${sheet.meta.name || "Character"} rolls d${sides} → ${r} (${action.label}).`);
-        break; }
+        return;
+      }
+
       case "buff": {
         const cur = Number(sheet.buffs[action.key] || 0);
         setSheet(s => ({ ...s, buffs: { ...s.buffs, [action.key]: cur + (action.value ?? 0) } }));
         log(`${sheet.meta.name || "Character"} gains ${action.value ?? ""} from ${action.label}.`);
-        break; }
+        return;
+      }
+
       case "toggle": {
         const cur = Boolean(sheet.buffs[action.key]);
         setSheet(s => ({ ...s, buffs: { ...s.buffs, [action.key]: !cur } }));
         log(`${action.label}: ${!cur ? "ON" : "OFF"}.`);
-        break; }
+        return;
+      }
+
       case "prompt": {
         const val = window.prompt(action.label + " — enter value");
         if (val) {
           setSheet(s => ({ ...s, buffs: { ...s.buffs, [action.key]: val } }));
           log(`${action.label}: ${val}`);
         }
-        break; }
-      default:
-        log(action.label);
+        return;
+      }
     }
+
+    return assertNever(action);
   }
 
   const evasionTotal = sheet.evasion + Number(sheet.buffs.evadeBuff || 0);
@@ -295,7 +315,13 @@ function ClassActions({ sheet, setSheet }: { sheet: Sheet; setSheet: React.Dispa
 }
 
 // ------- Top Bar -------
-function TopBar({ sheet, setSheet }: { sheet: Sheet; setSheet: React.Dispatch<React.SetStateAction<Sheet>>; }) {
+function TopBar({
+  sheet, setSheet, library,
+}: {
+  sheet: Sheet;
+  setSheet: React.Dispatch<React.SetStateAction<Sheet>>;
+  library: Record<string, ClassDef>;
+}) {
   const setMeta = (k: keyof Sheet["meta"], v: string | number) => setSheet(s => ({ ...s, meta: { ...s.meta, [k]: v } }));
 
   const onImport = (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,9 +340,12 @@ function TopBar({ sheet, setSheet }: { sheet: Sheet; setSheet: React.Dispatch<Re
       <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
         <div>
           <Label>Class</Label>
-          <select className="mt-1 w-full rounded-xl border p-2 shadow-sm" value={sheet.classKey}
-                  onChange={(e) => setSheet(defaultSheet(e.target.value))}>
-            {Object.keys(CLASS_LIBRARY).map(k => (<option key={k} value={k}>{k}</option>))}
+          <select
+            className="mt-1 w-full rounded-xl border p-2 shadow-sm"
+            value={sheet.classKey}
+            onChange={(e) => setSheet(defaultSheet(e.target.value, library))}
+          >
+            {Object.keys(library).map(k => (<option key={k} value={k}>{k}</option>))}
           </select>
         </div>
         <TextInput label="Name" value={sheet.meta.name} onChange={(v) => setMeta("name", v)} />
@@ -338,18 +367,28 @@ function TopBar({ sheet, setSheet }: { sheet: Sheet; setSheet: React.Dispatch<Re
 
 // ------- App -------
 export default function App() {
-  const [sheet, setSheet] = useLocalSheet("default", defaultSheet("Rogue"));
+  // Load external classes from /public/classes/index.json and merge with built-ins
+  const [extLib, setExtLib] = useState<Record<string, ClassDef>>({});
+  useEffect(() => {
+    fetch('/classes/index.json')
+      .then(r => (r.ok ? r.json() : {}))
+      .then((j) => setExtLib(j || {}))
+      .catch(() => {});
+  }, []);
+  const LIB = useMemo(() => ({ ...CLASS_LIBRARY, ...extLib }), [extLib]);
+
+  const [sheet, setSheet] = useLocalSheet("default", defaultSheet("Rogue", LIB));
   const t = sheet.traits;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 p-4 md:p-8">
       <div className="mx-auto max-w-6xl space-y-4">
         <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Daggerheart – Digital Sheet (Multi‑Class)</h1>
+          <h1 className="text-2xl font-bold">Daggerheart – Digital Sheet (Multi-Class)</h1>
           <div className="text-xs text-gray-500">Unofficial tool for personal use</div>
         </header>
 
-        <TopBar sheet={sheet} setSheet={setSheet} />
+        <TopBar sheet={sheet} setSheet={setSheet} library={LIB} />
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Card title="Traits">
@@ -386,7 +425,7 @@ export default function App() {
           </Card>
         </div>
 
-        <ClassActions sheet={sheet} setSheet={setSheet} />
+        <ClassActions sheet={sheet} setSheet={setSheet} classDef={LIB[sheet.classKey]} />
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <WeaponEditor title="Primary Weapon" data={sheet.weapons.primary} onChange={(w) => setSheet({ ...sheet, weapons: { ...sheet.weapons, primary: w } })} />
@@ -407,8 +446,19 @@ export default function App() {
           <Card title="Notes"><TextArea label="" rows={6} value={sheet.notes} onChange={(v) => setSheet({ ...sheet, notes: v })} /></Card>
           <Card title="Status">
             <div className="space-y-2 text-sm">
-              <div>Buffs: {JSON.stringify(sheet.buffs)}</div>
-              <div>Class start Evasion: {CLASS_LIBRARY[sheet.classKey]?.startEvasion}</div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(sheet.buffs as Record<string, unknown>).length ? (
+                  Object.entries(sheet.buffs as Record<string, unknown>).map(([k, v]) => (
+                    <span key={k} className="rounded-full border px-2 py-0.5 text-xs bg-white shadow-sm">
+                      {k}: {String(v)}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-gray-400">No buffs</span>
+                )}
+              </div>
+
+              <div>Class start Evasion: {LIB[sheet.classKey]?.startEvasion}</div>
             </div>
           </Card>
         </div>
