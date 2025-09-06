@@ -205,10 +205,12 @@ function NumberField({
         onClick={() => onChange(clamp(value - step, min, max))}
       >−</button>
       <input
-        className="w-12 border-0 text-center outline-none bg-transparent"
+        className="no-spin w-12 border-0 text-center outline-none bg-transparent"
         type="number"
         value={value}
         onChange={(e) => onChange(clamp(parseInt(e.target.value || "0", 10), min, max))}
+        onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}              // prevent wheel changing the value
+        onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}  // block arrow keys
       />
       <button
         aria-label={`increase ${label}`}
