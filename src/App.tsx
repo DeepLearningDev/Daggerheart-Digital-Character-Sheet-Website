@@ -188,19 +188,55 @@ function TextArea({ label, value, onChange, rows = 3 }: { label: string; value: 
   );
 }
 
-function NumberField({ label, value, onChange, min = -10, max = 30, step = 1 }: { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; }) {
+function NumberField({
+  label, value, onChange, min = -10, max = 30, step = 1, stacked = true,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number; max?: number; step?: number;
+  stacked?: boolean;
+}) {
+  const Control = (
+    <div className="inline-flex items-center whitespace-nowrap rounded-xl border p-1 shadow-sm bg-white">
+      <button
+        aria-label={`decrease ${label}`}
+        className="px-2"
+        onClick={() => onChange(clamp(value - step, min, max))}
+      >−</button>
+      <input
+        className="w-12 border-0 text-center outline-none bg-transparent"
+        type="number"
+        value={value}
+        onChange={(e) => onChange(clamp(parseInt(e.target.value || "0", 10), min, max))}
+      />
+      <button
+        aria-label={`increase ${label}`}
+        className="px-2"
+        onClick={() => onChange(clamp(value + step, min, max))}
+      >+</button>
+    </div>
+  );
+
+  if (stacked) {
+    return (
+      <label className="block min-w-0">
+        <Label>{label}</Label>
+        <div className="mt-1">{Control}</div>
+      </label>
+    );
+  }
+
+  // inline layout for short labels
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0">
       <Label>{label}</Label>
-      <div className="ml-auto flex items-center rounded-xl border p-1 shadow-sm">
-        <button className="px-2" onClick={() => onChange(clamp(value - step, min, max))}>−</button>
-        <input className="w-14 border-0 text-center outline-none" type="number" value={value}
-               onChange={(e) => onChange(clamp(parseInt(e.target.value || "0", 10), min, max))} />
-        <button className="px-2" onClick={() => onChange(clamp(value + step, min, max))}>+</button>
-      </div>
+      <div className="ml-auto shrink-0">{Control}</div>
     </div>
   );
 }
+
+
 
 function Track({ label, value, max, onChange }: { label: string; value: number; max: number; onChange: (v: number) => void; }) {
   const boxes = Array.from({ length: max }, (_, i) => i < value);
@@ -393,24 +429,29 @@ export default function App() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Card title="Traits">
             <div className="space-y-2">
-              <NumberField label="Agility" value={t.agility} onChange={(v) => setSheet({ ...sheet, traits: { ...t, agility: v } })} />
-              <NumberField label="Strength" value={t.strength} onChange={(v) => setSheet({ ...sheet, traits: { ...t, strength: v } })} />
-              <NumberField label="Finesse" value={t.finesse} onChange={(v) => setSheet({ ...sheet, traits: { ...t, finesse: v } })} />
-              <NumberField label="Instinct" value={t.instinct} onChange={(v) => setSheet({ ...sheet, traits: { ...t, instinct: v } })} />
-              <NumberField label="Presence" value={t.presence} onChange={(v) => setSheet({ ...sheet, traits: { ...t, presence: v } })} />
-              <NumberField label="Knowledge" value={t.knowledge} onChange={(v) => setSheet({ ...sheet, traits: { ...t, knowledge: v } })} />
+              <NumberField label="Agility"  value={t.agility}  onChange={(v) => setSheet({ ...sheet, traits: { ...t, agility: v } })}  stacked={false} />
+              <NumberField label="Strength" value={t.strength} onChange={(v) => setSheet({ ...sheet, traits: { ...t, strength: v } })} stacked={false} />
+              <NumberField label="Finesse"  value={t.finesse}  onChange={(v) => setSheet({ ...sheet, traits: { ...t, finesse: v } })}  stacked={false} />
+              <NumberField label="Instinct" value={t.instinct} onChange={(v) => setSheet({ ...sheet, traits: { ...t, instinct: v } })} stacked={false} />
+              <NumberField label="Presence" value={t.presence} onChange={(v) => setSheet({ ...sheet, traits: { ...t, presence: v } })} stacked={false} />
+              <NumberField label="Knowledge" value={t.knowledge} onChange={(v) => setSheet({ ...sheet, traits: { ...t, knowledge: v } })} stacked={false} />
             </div>
           </Card>
 
           <Card title="Defense">
             <div className="grid grid-cols-2 gap-3">
-              <NumberField label="Evasion (base)" value={sheet.evasion} min={0} max={99} onChange={(v) => setSheet({ ...sheet, evasion: v })} />
-              <NumberField label="Armor" value={sheet.armor} min={0} max={10} onChange={(v) => setSheet({ ...sheet, armor: v })} />
+              <NumberField label="Evasion (base)" value={sheet.evasion} min={0} max={99}
+                onChange={(v) => setSheet({ ...sheet, evasion: v })} stacked={false} />
+              <NumberField label="Armor" value={sheet.armor} min={0} max={10}
+                onChange={(v) => setSheet({ ...sheet, armor: v })} stacked={false} />
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-3">
-              <NumberField label="Minor Threshold" value={sheet.damage.minor} min={1} max={99} onChange={(v) => setSheet({ ...sheet, damage: { ...sheet.damage, minor: v } })} />
-              <NumberField label="Major Threshold" value={sheet.damage.major} min={1} max={99} onChange={(v) => setSheet({ ...sheet, damage: { ...sheet.damage, major: v } })} />
-              <NumberField label="Severe Threshold" value={sheet.damage.severe} min={1} max={99} onChange={(v) => setSheet({ ...sheet, damage: { ...sheet.damage, severe: v } })} />
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-3">
+              <NumberField label="Minor Threshold"  value={sheet.damage.minor}  min={1} max={99}
+                onChange={(v) => setSheet({ ...sheet, damage: { ...sheet.damage, minor: v } })} />
+              <NumberField label="Major Threshold"  value={sheet.damage.major}  min={1} max={99}
+                onChange={(v) => setSheet({ ...sheet, damage: { ...sheet.damage, major: v } })} />
+              <NumberField label="Severe Threshold" value={sheet.damage.severe} min={1} max={99}
+                onChange={(v) => setSheet({ ...sheet, damage: { ...sheet.damage, severe: v } })} />
             </div>
           </Card>
 
