@@ -238,23 +238,6 @@ function NumberField({
   );
 }
 
-
-
-function Track({ label, value, max, onChange }: { label: string; value: number; max: number; onChange: (v: number) => void; }) {
-  const boxes = Array.from({ length: max }, (_, i) => i < value);
-  return (
-    <div>
-      <div className="flex items-center justify-between"><Label>{label}</Label><div className="text-xs">{value}/{max}</div></div>
-      <div className="mt-1 flex flex-wrap gap-1">
-        {boxes.map((filled, i) => (
-          <button key={i} onClick={() => onChange(i + 1 === value ? i : i + 1)}
-                  className={`h-6 w-6 rounded-md border ${filled ? "bg-gray-800 text-white" : "bg-white"}`}>{filled ? "■" : ""}</button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 const Card: React.FC<React.PropsWithChildren<{ title: string; actions?: React.ReactNode }>> = ({ title, actions, children }) => (
   <div className="rounded-2xl border bg-white p-4 shadow">
     <div className="mb-2 flex items-center justify-between">
@@ -403,6 +386,65 @@ function TopBar({
   );
 }
 
+// ------ Icons -----
+type IconKind = "heart" | "shield" | "stress";
+
+function SvgIcon({ kind, filled }: { kind: IconKind; filled: boolean }) {
+  const base = "h-6 w-6 transition-colors";
+  const off  = "fill-transparent stroke-gray-400";
+  const on   =
+    kind === "heart"  ? "fill-rose-500 stroke-rose-600" :
+    kind === "shield" ? "fill-sky-500  stroke-sky-600"  :
+                        "fill-amber-500 stroke-amber-600"; // stress
+
+  return (
+    <svg viewBox="0 0 24 24" className={`${base} ${filled ? on : off}`} strokeWidth={1.75}>
+      {kind === "heart" && (
+        <path d="M12 21s-6-3.9-9-7.2C1.6 10.9 2.5 7 6 7c2 0 3.3 1 6 4 2.7-3 4-4 6-4 3.4 0 4.4 3.9 3 6.8C18 17.1 12 21 12 21z" />
+      )}
+      {kind === "shield" && (
+        <path d="M12 2 20 6v6c0 5-3.6 9-8 10-4.4-1-8-5-8-10V6l8-4z" />
+      )}
+      {kind === "stress" && (
+        <path d="M13 2 4 14h6l-1 8 11-14h-6l1-6z" />
+      )}
+    </svg>
+  );
+}
+
+function IconTrack({
+  label, value, max, onChange, kind,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  onChange: (v: number) => void;
+  kind: IconKind;
+}) {
+  const cells = Array.from({ length: max }, (_, i) => i < value);
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <Label>{label}</Label>
+        <div className="text-xs">{value}/{max}</div>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1">
+        {cells.map((filled, i) => (
+          <button
+            key={i}
+            aria-label={`${label} ${i + 1}`}
+            className="rounded-md p-1 hover:bg-gray-100"
+            onClick={() => onChange(i + 1 === value ? i : i + 1)}
+          >
+            <SvgIcon kind={kind} filled={filled} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
 // ------- App -------
 export default function App() {
   // Load external classes from /public/classes/index.json and merge with built-ins
@@ -444,8 +486,13 @@ export default function App() {
             <div className="grid grid-cols-2 gap-3">
               <NumberField label="Evasion (base)" value={sheet.evasion} min={0} max={99}
                 onChange={(v) => setSheet({ ...sheet, evasion: v })} stacked={false} />
-              <NumberField label="Armor" value={sheet.armor} min={0} max={10}
-                onChange={(v) => setSheet({ ...sheet, armor: v })} stacked={false} />
+              <IconTrack
+                label="Armor"
+                kind="shield"
+                value={sheet.armor}
+                max={10} // adjust if you want a different cap
+                onChange={(v) => setSheet({ ...sheet, armor: v })}
+              />
             </div>
             <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-3">
               <NumberField label="Minor Threshold"  value={sheet.damage.minor}  min={1} max={99}
@@ -459,11 +506,44 @@ export default function App() {
 
           <Card title="Vitals">
             <div className="space-y-3">
-              <Track label="HP" value={sheet.hp.current} max={sheet.hp.max} onChange={(v) => setSheet({ ...sheet, hp: { ...sheet.hp, current: v } })} />
-              <NumberField label="HP Max" value={sheet.hp.max} min={1} max={30} onChange={(v) => setSheet({ ...sheet, hp: { ...sheet.hp, max: v, current: clamp(sheet.hp.current, 1, v) } })} />
-              <Track label="Stress" value={sheet.stress.current} max={sheet.stress.max} onChange={(v) => setSheet({ ...sheet, stress: { ...sheet.stress, current: v } })} />
-              <NumberField label="Stress Max" value={sheet.stress.max} min={1} max={30} onChange={(v) => setSheet({ ...sheet, stress: { ...sheet.stress, max: v, current: clamp(sheet.stress.current, 0, v) } })} />
-              <NumberField label="Hope" value={sheet.hope} min={0} max={9} onChange={(v) => setSheet({ ...sheet, hope: v })} />
+              <IconTrack
+                label="HP"
+                kind="heart"
+                value={sheet.hp.current}
+                max={sheet.hp.max}
+                onChange={(v) => setSheet({ ...sheet, hp: { ...sheet.hp, current: v } })}
+              />
+              <NumberField
+                label="HP Max"
+                value={sheet.hp.max}
+                min={1}
+                max={30}
+                onChange={(v) =>
+                  setSheet({
+                    ...sheet,
+                    hp: { ...sheet.hp, max: v, current: clamp(sheet.hp.current, 1, v) },
+                  })
+                }
+              />
+              <IconTrack
+                label="Stress"
+                kind="stress"
+                value={sheet.stress.current}
+                max={sheet.stress.max}
+                onChange={(v) => setSheet({ ...sheet, stress: { ...sheet.stress, current: v } })}
+              />
+              <NumberField
+                label="Stress Max"
+                value={sheet.stress.max}
+                min={1}
+                max={30}
+                onChange={(v) =>
+                  setSheet({
+                    ...sheet,
+                    stress: { ...sheet.stress, max: v, current: clamp(sheet.stress.current, 0, v) },
+                  })
+                }
+              />
             </div>
           </Card>
         </div>
