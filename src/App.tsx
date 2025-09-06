@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 // ---- Daggerheart Digital Sheet (Multi-Class) — TypeScript-friendly React ----
-// Paste this into src/App.tsx in a Vite React + Tailwind project.
 // Saves to localStorage; class actions are logged; ready to bolt on a backend later.
 
 // ------- Types -------
@@ -10,6 +9,7 @@ export type Traits = {
   instinct: number; presence: number; knowledge: number;
 };
 export type Weapon = { name: string; trait: string; range: string; damage: string; feature: string };
+export type Experience = { id: string; text: string; bonus: number; active: boolean };
 export type ClassAction =
   | { id: string; label: string; type: "note" }
   | { id: string; label: string; type: "roll"; die?: number }
@@ -36,6 +36,7 @@ export type Sheet = {
   armorBlock: { name: string; thresholds: string; base: string; feature: string };
   inventory: string; notes: string;
   buffs: Record<string, unknown>;
+  experiences: Experience[];
   _log: string[];
 };
 
@@ -47,6 +48,12 @@ const lsKey = (id: string) => `dh-sheet:${id}`;
 function assertNever(x: never): never {
   throw new Error(`Unhandled ClassAction variant: ${JSON.stringify(x)}`);
 }
+
+const uuid = () =>
+  (typeof crypto !== "undefined" && "randomUUID" in crypto)
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 
 // ------- Built-in class library (seed) -------
 const CLASS_LIBRARY: Record<string, ClassDef> = {
@@ -136,11 +143,11 @@ function useLocalSheet(id: string, initial: Sheet): [Sheet, React.Dispatch<React
 }
 
 // NOTE: defaultSheet now takes a library param so it works with external JSON too.
-function defaultSheet(classKey: string = "Rogue", lib: Record<string, ClassDef> = CLASS_LIBRARY): Sheet {
-  const fallbackClassKey = lib.Rogue ? "Rogue" : Object.keys(lib)[0];
+function defaultSheet(classKey: string = "Bard", lib: Record<string, ClassDef> = CLASS_LIBRARY): Sheet {
+  const fallbackClassKey = lib.Bard ? "Bard" : Object.keys(lib)[0];
   const c = lib[classKey] || lib[fallbackClassKey];
   return {
-    id: crypto?.randomUUID?.() || String(Date.now()),
+    id: (typeof crypto !== "undefined" && "randomUUID" in crypto) ? crypto.randomUUID() : String(Date.now()),
     classKey,
     meta: { name: "", pronouns: "", heritage: "", subclass: "", level: 1 },
     traits: { agility: 0, strength: 0, finesse: 0, instinct: 0, presence: 0, knowledge: 0 },
@@ -159,13 +166,17 @@ function defaultSheet(classKey: string = "Rogue", lib: Record<string, ClassDef> 
     armorBlock: { name: "", thresholds: "", base: "", feature: "" },
     inventory: "torch, 50ft rope, basic supplies",
     notes: "",
+    experiences: [
+      { id: uuid(), text: "", bonus: 2, active: false },
+      { id: uuid(), text: "", bonus: 2, active: false },
+    ],
     _log: [],
   };
 }
 
 // ------- Small UI atoms -------
-const Label: React.FC<React.PropsWithChildren> = ({ children }) => (
-  <div className="text-xs uppercase tracking-wide text-gray-500">{children}</div>
+const Label: React.FC<React.PropsWithChildren<{ className?: string }>> = ({ children, className }) => (
+  <div className={`text-xs uppercase tracking-wide ${className ?? "text-gray-500"}`}>{children}</div>
 );
 
 function TextInput({ label, value, onChange, placeholder = "" }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; }) {
@@ -178,6 +189,60 @@ function TextInput({ label, value, onChange, placeholder = "" }: { label: string
   );
 }
 
+
+// Color accents per trait (fixed class strings = Tailwind-safe)
+const TRAIT_COLORS: Record<keyof Traits, {
+  wrapper: string;   // bg + left border tint around the field row
+  label: string;     // label color
+  control: string;   // +/- control border color
+  diceBtn: string;   // dice button border/hover
+  diceIcon: string;  // dice icon color
+}> = {
+  agility:  {
+    wrapper: "border-l-4 border-emerald-300 bg-emerald-50/40 rounded-xl p-2",
+    label:   "text-emerald-700",
+    control: "border-emerald-300",
+    diceBtn: "border-emerald-300 hover:bg-emerald-50",
+    diceIcon:"fill-emerald-700",
+  },
+  strength: {
+    wrapper: "border-l-4 border-orange-300 bg-orange-50/40 rounded-xl p-2",
+    label:   "text-orange-700",
+    control: "border-orange-300",
+    diceBtn: "border-orange-300 hover:bg-orange-50",
+    diceIcon:"fill-orange-700",
+  },
+  finesse:  {
+    wrapper: "border-l-4 border-violet-300 bg-violet-50/40 rounded-xl p-2",
+    label:   "text-violet-700",
+    control: "border-violet-300",
+    diceBtn: "border-violet-300 hover:bg-violet-50",
+    diceIcon:"fill-violet-700",
+  },
+  instinct: {
+    wrapper: "border-l-4 border-teal-300 bg-teal-50/40 rounded-xl p-2",
+    label:   "text-teal-700",
+    control: "border-teal-300",
+    diceBtn: "border-teal-300 hover:bg-teal-50",
+    diceIcon:"fill-teal-700",
+  },
+  presence: {
+    wrapper: "border-l-4 border-pink-300 bg-pink-50/40 rounded-xl p-2",
+    label:   "text-pink-700",
+    control: "border-pink-300",
+    diceBtn: "border-pink-300 hover:bg-pink-50",
+    diceIcon:"fill-pink-700",
+  },
+  knowledge:{
+    wrapper: "border-l-4 border-indigo-300 bg-indigo-50/40 rounded-xl p-2",
+    label:   "text-indigo-700",
+    control: "border-indigo-300",
+    diceBtn: "border-indigo-300 hover:bg-indigo-50",
+    diceIcon:"fill-indigo-700",
+  },
+};
+
+
 function TextArea({ label, value, onChange, rows = 3 }: { label: string; value: string; onChange: (v: string) => void; rows?: number; }) {
   return (
     <label className="block">
@@ -189,59 +254,71 @@ function TextArea({ label, value, onChange, rows = 3 }: { label: string; value: 
 }
 
 function NumberField({
-  label, value, onChange, min = -10, max = 30, step = 1, stacked = true,
+  label, value, onChange, min = -10, max = 30, step = 1,
+  stacked = true, trailing, hint, sub,
+  className = "",          // NEW: wrapper accent
+  labelClassName = "",     // NEW: label accent
+  controlClassName = "",   // NEW: +/- control accent
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
   min?: number; max?: number; step?: number;
   stacked?: boolean;
+  trailing?: React.ReactNode;
+  hint?: string;
+  sub?: string;
+  className?: string;
+  labelClassName?: string;
+  controlClassName?: string;
 }) {
   const Control = (
-    <div className="inline-flex items-center whitespace-nowrap rounded-xl border p-1 shadow-sm bg-white">
-      <button
-        aria-label={`decrease ${label}`}
-        className="px-2"
-        onClick={() => onChange(clamp(value - step, min, max))}
-      >−</button>
+    <div className={`inline-flex items-center whitespace-nowrap rounded-xl border p-1 shadow-sm bg-white ${controlClassName}`}>
+      <button aria-label={`decrease ${label}`} className="px-2"
+        onClick={() => onChange(clamp(value - step, min, max))}>−</button>
       <input
         className="no-spin w-12 border-0 text-center outline-none bg-transparent"
         type="number"
         value={value}
         onChange={(e) => onChange(clamp(parseInt(e.target.value || "0", 10), min, max))}
-        onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}              // prevent wheel changing the value
-        onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}  // block arrow keys
+        onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
+        onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault(); }}
       />
-      <button
-        aria-label={`increase ${label}`}
-        className="px-2"
-        onClick={() => onChange(clamp(value + step, min, max))}
-      >+</button>
+      <button aria-label={`increase ${label}`} className="px-2"
+        onClick={() => onChange(clamp(value + step, min, max))}>+</button>
     </div>
   );
 
   if (stacked) {
     return (
-      <label className="block min-w-0">
-        <Label>{label}</Label>
-        <div className="mt-1">{Control}</div>
+      <label className={`block min-w-0 ${className}`} title={hint}>
+        <Label className={labelClassName}>{label}</Label>
+        {sub && <div className="text-[10px] leading-tight text-gray-400">{sub}</div>}
+        <div className="mt-1 flex items-center gap-2">
+          {Control}
+          {trailing && <div className="shrink-0">{trailing}</div>}
+        </div>
       </label>
     );
   }
 
-  // inline layout for short labels
   return (
-    <div className="flex items-center gap-2 min-w-0">
-      <Label>{label}</Label>
+    <div className={`flex items-start gap-2 min-w-0 ${className}`} title={hint}>
+      <div className="flex flex-col">
+        <Label className={labelClassName}>{label}</Label>
+        {sub && <div className="text-[10px] leading-tight text-gray-400">{sub}</div>}
+      </div>
       <div className="ml-auto shrink-0">{Control}</div>
+      {trailing && <div className="shrink-0">{trailing}</div>}
     </div>
   );
 }
 
+
 const Card: React.FC<React.PropsWithChildren<{ title: string; actions?: React.ReactNode }>> = ({ title, actions, children }) => (
-  <div className="rounded-2xl border bg-white p-4 shadow">
+  <div className="rounded-2xl border border-white/60 bg-white/80 backdrop-blur p-4 shadow-sm transition-colors hover:border-slate-200/80">
     <div className="mb-2 flex items-center justify-between">
-      <h3 className="text-sm font-semibold tracking-wide text-gray-700">{title}</h3>
+      <h3 className="text-sm font-semibold tracking-wide text-slate-700">{title}</h3>
       {actions}
     </div>
     {children}
@@ -357,7 +434,7 @@ function TopBar({
   };
 
   return (
-    <div className="rounded-2xl border bg-white p-4 shadow">
+    <div className="rounded-2xl border border-white/60 bg-white/80 backdrop-blur p-4 shadow-sm">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
         <div>
           <Label>Class</Label>
@@ -445,6 +522,109 @@ function IconTrack({
 }
 
 
+// What each trait is used for (shows as a tooltip)
+const TRAIT_INFO: Record<keyof Traits, string> = {
+  agility:  "Sprint • Leap • Maneuver",
+  strength: "Lift • Smash • Grapple",
+  finesse:  "Control • Hide • Tinker",
+  instinct: "Perceive • Sense • Navigate",
+  presence: "Charm • Perform • Deceive",
+  knowledge:"Recall • Analyze • Comprehend",
+};
+
+// Small dice icon button
+function DiceButton({
+  title, onClick, className = "", iconClassName = "",
+}: {
+  title: string;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  className?: string;
+  iconClassName?: string;
+}) {
+  return (
+    <button
+      className={`shrink-0 rounded-lg border p-1.5 shadow-sm ${className}`}
+      title={`${title}\nClick: normal • Shift: advantage • Ctrl/⌘: disadvantage`}
+      onClick={onClick}
+      aria-label={`Roll ${title}`}
+    >
+      <svg viewBox="0 0 24 24" className={`h-5 w-5 ${iconClassName || "fill-gray-700"}`}>
+        <path d="M12 2 20.5 7v10L12 22 3.5 17V7L12 2zM5.7 8.3 12 5l6.3 3.3V15L12 18l-6.3-3V8.3z"/>
+      </svg>
+    </button>
+  );
+}
+
+// ----- Expereinces -----
+function ExperiencesCard({
+  sheet, setSheet,
+}: {
+  sheet: Sheet;
+  setSheet: React.Dispatch<React.SetStateAction<Sheet>>;
+}) {
+  const exps = sheet.experiences ?? [];
+  const activeBonus = exps.filter(e => e.active).reduce((s, e) => s + (e.bonus || 0), 0);
+
+  const update = (id: string, patch: Partial<Experience>) =>
+    setSheet(s => ({ ...s, experiences: s.experiences.map(e => e.id === id ? { ...e, ...patch } : e) }));
+
+  const add = () =>
+  setSheet(s => ({
+    ...s,
+    experiences: [...(s.experiences ?? []), { id: uuid(), text: "", bonus: 2, active: false }],
+  }));
+
+  const del = (id: string) =>
+    setSheet(s => ({ ...s, experiences: s.experiences.filter(e => e.id !== id) }));
+
+  const clearActives = () =>
+    setSheet(s => ({ ...s, experiences: s.experiences.map(e => ({ ...e, active: false })) }));
+
+  return (
+    <Card
+      title="Experiences"
+      actions={
+        <div className="flex items-center gap-2 text-xs">
+          <span className="rounded-full border bg-white px-2 py-0.5">Active bonus: +{activeBonus}</span>
+          <button className="rounded-lg border px-2 py-1" onClick={add}>+ Add</button>
+          <button className="rounded-lg border px-2 py-1" onClick={clearActives}>Clear active</button>
+        </div>
+      }
+    >
+      <div className="space-y-2">
+        {exps.length === 0 && <div className="text-sm text-gray-400">No experiences yet.</div>}
+        {exps.map((e) => (
+          <div key={e.id} className="grid grid-cols-[auto,1fr,auto,auto] items-center gap-2">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              title="Relevant to this roll"
+              checked={e.active}
+              onChange={(ev) => update(e.id, { active: ev.target.checked })}
+            />
+            <input
+              className="w-full rounded-xl border p-2 shadow-sm"
+              placeholder="Describe the experience…"
+              value={e.text}
+              onChange={(ev) => update(e.id, { text: ev.target.value })}
+            />
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-500">+ / bonus</span>
+              <input
+                type="number"
+                className="no-spin w-14 rounded-xl border p-1 text-center shadow-sm"
+                value={e.bonus}
+                onChange={(ev) => update(e.id, { bonus: clamp(parseInt(ev.target.value || "0", 10), 0, 10) })}
+              />
+            </div>
+            <button className="rounded-lg border px-2 py-1" onClick={() => del(e.id)}>Delete</button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 // ------- App -------
 export default function App() {
   // Load external classes from /public/classes/index.json and merge with built-ins
@@ -457,15 +637,51 @@ export default function App() {
   }, []);
   const LIB = useMemo(() => ({ ...CLASS_LIBRARY, ...extLib }), [extLib]);
 
-  const [sheet, setSheet] = useLocalSheet("default", defaultSheet("Rogue", LIB));
+  const [sheet, setSheet] = useLocalSheet("default", defaultSheet("Bard", LIB));
+  // migrate old saves that predate "experiences"
+  useEffect(() => {
+    if (!Array.isArray(sheet.experiences)) {
+      setSheet(s => ({ ...s, experiences: [] }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once
+
   const t = sheet.traits;
 
+  const C = TRAIT_COLORS;
+
+  // Faces of the action die (change to 20 if you prefer d20)
+  const ACTION_DIE = 12;
+
+  function rollTrait(traitLabel: string, mod: number, e: React.MouseEvent) {
+  const adv = e.shiftKey;
+  const dis = e.ctrlKey || e.metaKey;
+
+  const r1 = d(ACTION_DIE);
+  const r2 = (adv || dis) ? d(ACTION_DIE) : null;
+  const picked = r2 ? (adv ? Math.max(r1, r2) : Math.min(r1, r2)) : r1;
+
+  const expActive = (sheet.experiences ?? []).filter(x => x.active);
+  const expBonus  = expActive.reduce((s, x) => s + (x.bonus || 0), 0);
+
+  const total = picked + mod + expBonus;
+
+  const detail = r2 ? `${r1}/${r2}` : `${r1}`;
+  const tag = adv ? " (adv)" : dis ? " (dis)" : "";
+  const expText = expActive.length ? ` + EXP +${expBonus} [${expActive.map(x => x.text || "exp").join(", ")}]` : "";
+  const line = `Roll ${traitLabel}${tag}: ${detail} + ${mod}${expText} = ${total}`;
+
+  setSheet(s => ({ ...s, _log: [line, ...s._log].slice(0, 20) }));
+}
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 p-4 md:p-8">
-      <div className="mx-auto max-w-6xl space-y-4">
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-rose-50 to-indigo-100 p-6 md:p-10">
+      <div className="mx-auto max-w-6xl space-y-4 rounded-3xl border border-white/60 bg-white/80 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 p-6 md:p-10">
         <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Daggerheart – Digital Sheet (Multi-Class)</h1>
-          <div className="text-xs text-gray-500">Unofficial tool for personal use</div>
+          <h1 className="text-2xl font-extrabold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+            Daggerheart – Digital Sheet (Multi-Class)
+          </h1>
+          <div className="text-xs text-slate-600/80">Unofficial tool for personal use</div>
         </header>
 
         <TopBar sheet={sheet} setSheet={setSheet} library={LIB} />
@@ -473,12 +689,91 @@ export default function App() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Card title="Traits">
             <div className="space-y-2">
-              <NumberField label="Agility"  value={t.agility}  onChange={(v) => setSheet({ ...sheet, traits: { ...t, agility: v } })}  stacked={false} />
-              <NumberField label="Strength" value={t.strength} onChange={(v) => setSheet({ ...sheet, traits: { ...t, strength: v } })} stacked={false} />
-              <NumberField label="Finesse"  value={t.finesse}  onChange={(v) => setSheet({ ...sheet, traits: { ...t, finesse: v } })}  stacked={false} />
-              <NumberField label="Instinct" value={t.instinct} onChange={(v) => setSheet({ ...sheet, traits: { ...t, instinct: v } })} stacked={false} />
-              <NumberField label="Presence" value={t.presence} onChange={(v) => setSheet({ ...sheet, traits: { ...t, presence: v } })} stacked={false} />
-              <NumberField label="Knowledge" value={t.knowledge} onChange={(v) => setSheet({ ...sheet, traits: { ...t, knowledge: v } })} stacked={false} />
+              <NumberField
+                label="Agility"
+                value={t.agility}
+                onChange={(v) => setSheet({ ...sheet, traits: { ...t, agility: v } })}
+                stacked={false}
+                hint={TRAIT_INFO.agility}
+                sub={TRAIT_INFO.agility}
+                className={C.agility.wrapper}
+                labelClassName={C.agility.label}
+                controlClassName={C.agility.control}
+                trailing={
+                  <DiceButton
+                    title="Agility"
+                    onClick={(e) => rollTrait("Agility", t.agility, e)}
+                    className={C.agility.diceBtn}
+                    iconClassName={C.agility.diceIcon}
+                  />
+                }
+              />
+
+              <NumberField
+                label="Strength"
+                value={t.strength}
+                onChange={(v) => setSheet({ ...sheet, traits: { ...t, strength: v } })}
+                stacked={false}
+                hint={TRAIT_INFO.strength}
+                sub={TRAIT_INFO.strength}
+                className={C.strength.wrapper}
+                labelClassName={C.strength.label}
+                controlClassName={C.strength.control}
+                trailing={<DiceButton title="Strength" onClick={(e) => rollTrait("Strength", t.strength, e)} className={C.strength.diceBtn} iconClassName={C.strength.diceIcon} />}
+              />
+
+              <NumberField
+                label="Finesse"
+                value={t.finesse}
+                onChange={(v) => setSheet({ ...sheet, traits: { ...t, finesse: v } })}
+                stacked={false}
+                hint={TRAIT_INFO.finesse}
+                sub={TRAIT_INFO.finesse}
+                className={C.finesse.wrapper}
+                labelClassName={C.finesse.label}
+                controlClassName={C.finesse.control}
+                trailing={<DiceButton title="Finesse" onClick={(e) => rollTrait("Finesse", t.finesse, e)} className={C.finesse.diceBtn} iconClassName={C.finesse.diceIcon} />}
+              />
+
+              <NumberField
+                label="Instinct"
+                value={t.instinct}
+                onChange={(v) => setSheet({ ...sheet, traits: { ...t, instinct: v } })}
+                stacked={false}
+                hint={TRAIT_INFO.instinct}
+                sub={TRAIT_INFO.instinct}
+                className={C.instinct.wrapper}
+                labelClassName={C.instinct.label}
+                controlClassName={C.instinct.control}
+                trailing={<DiceButton title="Instinct" onClick={(e) => rollTrait("Instinct", t.instinct, e)} className={C.instinct.diceBtn} iconClassName={C.instinct.diceIcon} />}
+              />
+
+              <NumberField
+                label="Presence"
+                value={t.presence}
+                onChange={(v) => setSheet({ ...sheet, traits: { ...t, presence: v } })}
+                stacked={false}
+                hint={TRAIT_INFO.presence}
+                sub={TRAIT_INFO.presence}
+                className={C.presence.wrapper}
+                labelClassName={C.presence.label}
+                controlClassName={C.presence.control}
+                trailing={<DiceButton title="Presence" onClick={(e) => rollTrait("Presence", t.presence, e)} className={C.presence.diceBtn} iconClassName={C.presence.diceIcon} />}
+              />
+
+              <NumberField
+                label="Knowledge"
+                value={t.knowledge}
+                onChange={(v) => setSheet({ ...sheet, traits: { ...t, knowledge: v } })}
+                stacked={false}
+                hint={TRAIT_INFO.knowledge}
+                sub={TRAIT_INFO.knowledge}
+                className={C.knowledge.wrapper}
+                labelClassName={C.knowledge.label}
+                controlClassName={C.knowledge.control}
+                trailing={<DiceButton title="Knowledge" onClick={(e) => rollTrait("Knowledge", t.knowledge, e)} className={C.knowledge.diceBtn} iconClassName={C.knowledge.diceIcon} />}
+              />
+
             </div>
           </Card>
 
@@ -550,6 +845,8 @@ export default function App() {
 
         <ClassActions sheet={sheet} setSheet={setSheet} classDef={LIB[sheet.classKey]} />
 
+        <ExperiencesCard sheet={sheet} setSheet={setSheet} />
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <WeaponEditor title="Primary Weapon" data={sheet.weapons.primary} onChange={(w) => setSheet({ ...sheet, weapons: { ...sheet.weapons, primary: w } })} />
           <WeaponEditor title="Secondary Weapon" data={sheet.weapons.secondary} onChange={(w) => setSheet({ ...sheet, weapons: { ...sheet.weapons, secondary: w } })} />
@@ -586,7 +883,7 @@ export default function App() {
           </Card>
         </div>
 
-        <footer className="pt-2 text-center text-xs text-gray-500">Unofficial fan tool • © Your Table • Ready for Cloudflare Pages</footer>
+        <footer className="pt-2 text-center text-xs text-gray-500">Unofficial fan tool • © Your Table</footer>
       </div>
     </div>
   );
