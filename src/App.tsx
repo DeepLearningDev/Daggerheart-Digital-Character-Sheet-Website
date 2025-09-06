@@ -242,6 +242,17 @@ const TRAIT_COLORS: Record<keyof Traits, {
   },
 };
 
+const CLASS_BG: Record<string, string> = {
+  Bard:     "from-rose-100 via-rose-50 to-rose-200",
+  Rogue:    "from-slate-100 via-slate-50 to-slate-200",
+  Druid:    "from-emerald-100 via-emerald-50 to-emerald-200",
+  Guardian: "from-sky-100 via-sky-50 to-sky-200",
+  Ranger:   "from-lime-100 via-lime-50 to-lime-200",
+  Seraph:   "from-amber-100 via-amber-50 to-amber-200",
+  Sorcerer: "from-violet-100 via-violet-50 to-violet-200",
+  Warrior:  "from-orange-100 via-orange-50 to-orange-200",
+};
+
 
 function TextArea({ label, value, onChange, rows = 3 }: { label: string; value: string; onChange: (v: string) => void; rows?: number; }) {
   return (
@@ -314,9 +325,12 @@ function NumberField({
   );
 }
 
+const PANEL =
+  "rounded-2xl border border-white/40 p-4 shadow-md " +
+  "bg-gradient-to-br from-white/70 to-white/40 backdrop-blur-lg";
 
 const Card: React.FC<React.PropsWithChildren<{ title: string; actions?: React.ReactNode }>> = ({ title, actions, children }) => (
-  <div className="rounded-2xl border border-white/60 bg-white/80 backdrop-blur p-4 shadow-sm transition-colors hover:border-slate-200/80">
+  <div className={PANEL}>
     <div className="mb-2 flex items-center justify-between">
       <h3 className="text-sm font-semibold tracking-wide text-slate-700">{title}</h3>
       {actions}
@@ -404,7 +418,7 @@ function ClassActions({
       </div>
       <div className="mt-3">
         <Label>Recent</Label>
-        <div className="mt-1 max-h-40 overflow-auto rounded-xl border bg-gray-50 p-2 text-sm text-gray-700">
+        <div className="mt-1 max-h-40 overflow-auto rounded-xl border bg-white/60 backdrop-blur p-2 text-sm text-gray-700">
           {sheet._log.length ? sheet._log.map((l, i) => (<div key={i}>• {l}</div>)) : <div className="text-gray-400">No actions yet.</div>}
         </div>
       </div>
@@ -434,7 +448,7 @@ function TopBar({
   };
 
   return (
-    <div className="rounded-2xl border border-white/60 bg-white/80 backdrop-blur p-4 shadow-sm">
+    <div className={PANEL}>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
         <div>
           <Label>Class</Label>
@@ -674,9 +688,26 @@ export default function App() {
   setSheet(s => ({ ...s, _log: [line, ...s._log].slice(0, 20) }));
 }
 
+    const CLASS_ACCENT: Record<string, string> = {
+  Bard:     "from-rose-50/70  to-rose-100/40",
+  Rogue:    "from-slate-50/70 to-slate-100/40",
+  Druid:    "from-emerald-50/70 to-emerald-100/40",
+  Guardian: "from-sky-50/70    to-sky-100/40",
+  Ranger:   "from-lime-50/70   to-lime-100/40",
+  Seraph:   "from-amber-50/70  to-amber-100/40",
+  Sorcerer: "from-violet-50/70 to-violet-100/40",
+  Warrior:  "from-orange-50/70 to-orange-100/40",
+  };
+  const accent = CLASS_ACCENT[sheet.classKey] ?? "from-white/70 to-white/40";
+  const bgClass = CLASS_BG[sheet.classKey] ?? "from-slate-50 via-white to-slate-100";
+  const SHEET_FRAME =
+    `mx-auto max-w-6xl space-y-4 rounded-3xl p-6 md:p-10
+      bg-gradient-to-br ${accent} backdrop-blur-xl
+      border border-white/40 ring-1 ring-black/5 shadow-2xl`;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-rose-50 to-indigo-100 p-6 md:p-10">
-      <div className="mx-auto max-w-6xl space-y-4 rounded-3xl border border-white/60 bg-white/80 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 p-6 md:p-10">
+    <div className={`min-h-screen bg-gradient-to-br ${bgClass} p-6 md:p-10 transition-colors duration-300`}>
+      <div className={SHEET_FRAME}>
         <header className="flex items-center justify-between">
           <h1 className="text-2xl font-extrabold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
             Daggerheart – Digital Sheet (Multi-Class)
